@@ -8,10 +8,6 @@
         :root { --line:#e5e7eb; --muted:#6b7280; --text:#1f2937; --bg:#f6f7f9; }
         * { box-sizing: border-box; }
         body { margin:0; font-family: system-ui, "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
-        nav { background:#111827; padding:0 24px; display:flex; align-items:center; gap:4px; }
-        nav .brand { color:#fff; font-weight:700; margin-right:20px; }
-        nav a { color:#d1d5db; text-decoration:none; padding:14px 12px; border-bottom:2px solid transparent; }
-        nav a.on, nav a:hover { color:#fff; border-bottom-color:#60a5fa; }
         main { max-width: 720px; margin: 24px auto; padding: 0 16px; }
         h1 { font-size: 22px; margin: 0 0 6px; }
         .desc { color:var(--muted); font-size:14px; margin:0 0 16px; }
@@ -31,12 +27,8 @@
     </style>
 </head>
 <body>
-<nav>
-    <span class="brand">할인 정보</span>
-    <a href="/">달력</a>
-    <a href="/map.html">지도</a>
-    <a href="/me.html" class="on">나의 정보</a>
-</nav>
+<nav id="nav" data-active="me"></nav>
+<script src="/js/nav.js"></script>
 <main>
     <h1>나의 정보</h1>
     <p class="desc">사용 중인 서비스를 고르면 달력·지도에 해당 서비스의 할인만 보여요. 아무것도 고르지 않으면 전체가 보여요.</p>
@@ -87,7 +79,7 @@
         try {
             const res = await fetch('/api/me/services', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
                 body: JSON.stringify(ids)
             });
             if (!res.ok) throw new Error();

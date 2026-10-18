@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>회원가입</title>
+    <style>
+        :root { --line:#e5e7eb; --muted:#6b7280; --text:#1f2937; --bg:#f6f7f9; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: system-ui, "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
+        main { max-width: 380px; margin: 48px auto; padding: 0 16px; }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px; }
+        h1 { font-size:22px; margin:0 0 18px; }
+        label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+        input { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:15px; }
+        .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+        button { width:100%; margin-top:18px; border:none; background:#2563eb; color:#fff; border-radius:8px; padding:11px; cursor:pointer; font-size:15px; }
+        .msg { padding:10px 12px; border-radius:8px; font-size:14px; margin-bottom:12px; display:none; background:#fee2e2; color:#991b1b; }
+        .sub { text-align:center; font-size:14px; color:var(--muted); margin-top:16px; }
+        .sub a { color:#2563eb; }
+    </style>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+    <div class="card">
+        <h1>회원가입</h1>
+        <div class="msg" id="msg"></div>
+        <form id="form">
+            <label for="username">아이디</label>
+            <input type="text" id="username" autocomplete="username" required autofocus>
+            <div class="hint">영문/숫자/밑줄 3~30자</div>
+            <label for="password">비밀번호</label>
+            <input type="password" id="password" autocomplete="new-password" required>
+            <div class="hint">8자 이상</div>
+            <label for="password2">비밀번호 확인</label>
+            <input type="password" id="password2" autocomplete="new-password" required>
+            <button type="submit">가입하기</button>
+        </form>
+        <p class="sub">이미 계정이 있으신가요? <a href="/login.html">로그인</a></p>
+    </div>
+</main>
+<script src="/js/nav.js"></script>
+<script>
+    const msg = document.getElementById('msg');
+    function showError(text) { msg.style.display = 'block'; msg.textContent = text; }
+
+    document.getElementById('form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        if (password !== document.getElementById('password2').value) {
+            showError('비밀번호가 서로 다릅니다.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
+                body: JSON.stringify({ username, password })
+            });
+            if (res.ok) { location.href = '/login.html?signup'; return; }
+            const body = await res.json().catch(() => ({}));
+            showError(body.message || '가입에 실패했습니다.');
+        } catch {
+            showError('가입에 실패했습니다.');
+        }
+    });
+</script>
+</body>
+</html>
