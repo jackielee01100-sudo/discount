@@ -22,6 +22,10 @@ public class DiscountEvent {
     @Column(nullable = false)
     private String name;
 
+    /** 어느 서비스의 행사인지 (예: T데이 → SKT). null이면 누구에게나 보이는 행사 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    private ServiceProvider provider;
+
     /** 시작일 (포함) */
     @Column(nullable = false)
     private LocalDate startDate;
