@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>관리자 · 할인정보 이미지</title>
+    <style>
+        :root { --line:#e5e7eb; --muted:#6b7280; --text:#1f2937; --bg:#f6f7f9; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: system-ui, "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
+        main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+        h1 { font-size: 22px; margin: 0 0 6px; }
+        .desc { color:var(--muted); font-size:14px; margin:0 0 16px; }
+        .layout { display:grid; grid-template-columns: 320px 1fr; gap:16px; align-items:start; }
+        .panel { background:#fff; border:1px solid var(--line); border-radius:10px; }
+        .panel h2 { font-size:15px; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+        .event { padding:12px 14px; border-bottom:1px solid var(--line); cursor:pointer; border-left:4px solid transparent; }
+        .event:last-child { border-bottom:none; }
+        .event:hover { background:#f9fafb; }
+        .event.on { background:#eff6ff; }
+        .event .name { font-weight:700; display:flex; align-items:center; gap:6px; }
+        .event .meta { font-size:13px; color:var(--muted); margin-top:3px; }
+        .tag { font-size:11px; padding:1px 7px; border-radius:999px; background:#f3f4f6; color:#374151; font-weight:600; }
+        .preview { padding:16px; }
+        .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+        .toolbar .title { font-weight:700; flex:1; }
+        button { border:1px solid #2563eb; background:#2563eb; color:#fff; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px; }
+        button:disabled { opacity:.4; cursor:default; }
+        canvas { width:100%; max-width:540px; height:auto; border:1px solid var(--line); border-radius:8px; display:block; margin:0 auto; background:#fff; }
+        .empty { color:var(--muted); font-size:14px; padding:14px; }
+        @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<nav id="nav" data-active="admin"></nav>
+<script src="/js/nav.js"></script>
+<main>
+    <h1>할인정보 이미지</h1>
+    <p class="desc">DB에 저장된 할인 행사를 골라 카드 이미지(PNG)로 내려받습니다.</p>
+
+    <div class="layout">
+        <div class="panel">
+            <h2>할인 행사</h2>
+            <div id="events"><div class="empty">불러오는 중…</div></div>
+        </div>
+        <div class="panel preview">
+            <div class="toolbar">
+                <span class="title" id="title">행사를 선택하세요</span>
+                <button type="button" id="downloadBtn" disabled>PNG 다운로드</button>
+            </div>
+            <canvas id="canvas" width="1080" height="1080"></canvas>
+        </div>
+    </div>
+</main>
+
+<script src="/js/event-card.js"></script>
+<script>
+    const canvas = document.getElementById('canvas');
+    const downloadBtn = document.getElementById('downloadBtn');
+    let current = null;
+
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function loadEvents() {
+        const res = await fetch('/api/admin/events');
+        if (!res.ok) throw new Error(res.status);
+        const events = await res.json();
+        const box = document.getElementById('events');
+        if (events.length === 0) {
+            box.innerHTML = '<div class="empty">등록된 할인 행사가 없습니다.</div>';
+            return;
+        }
+        box.innerHTML = '';
+        events.forEach(ev => {
+            const div = document.createElement('div');
+            div.className = 'event';
+            div.style.borderLeftColor = ev.color;
+            div.innerHTML = `<div class="name">${esc(ev.name)}${ev.providerName ? `<span class="tag">${esc(ev.providerName)}</span>` : ''}</div>`
+                + `<div class="meta">${esc(ev.startDate)} ~ ${esc(ev.endDate)} · 매장 ${ev.placeCount}곳</div>`;
+            div.addEventListener('click', () => select(ev.id, div));
+            box.appendChild(div);
+        });
+        box.querySelector('.event').click(); // 첫 행사 자동 선택
+    }
+
+    async function select(id, el) {
+        document.querySelectorAll('.event').forEach(e => e.classList.toggle('on', e === el));
+        current = await fetch(`/api/admin/events/${id}/card`).then(r => r.json());
+        drawEventCard(canvas, current);
+        document.getElementById('title').textContent = current.name;
+        downloadBtn.disabled = false;
+    }
+
+    downloadBtn.addEventListener('click', () => {
+        if (!current) return;
+        const safe = current.name.replace(/[\\/:*?"<>|\s]+/g, '_');
+        downloadCanvas(canvas, `${safe}_${current.startDate}.png`);
+    });
+
+    loadEvents().catch(() => {
+        document.getElementById('events').innerHTML = '<div class="empty">행사를 불러오지 못했습니다. 관리자 계정으로 로그인했는지 확인하세요.</div>';
+    });
+</script>
+</body>
+</html>

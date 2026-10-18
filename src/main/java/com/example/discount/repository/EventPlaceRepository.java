@@ -23,11 +23,21 @@ public interface EventPlaceRepository extends JpaRepository<EventPlace, Long> {
                             @Param("from") LocalDate from,
                             @Param("to") LocalDate to);
 
-    /** 행사별 브랜드 목록 (중복 제거, 이름순) */
+    /**
+     * 한 행사의 전체 매장.
+     * 한글 정렬은 Java에서 함 (DB 정렬 규칙 en_US.utf8은 한글을 가나다순으로 정렬하지 않음)
+     */
+    @Query("select p from EventPlace p where p.event.id = :eventId")
+    List<EventPlace> findByEventId(@Param("eventId") Long eventId);
+
+    /** 행사별 매장 수 [eventId, count] */
+    @Query("select p.event.id, count(p) from EventPlace p group by p.event.id")
+    List<Object[]> countByEvent();
+
+    /** 행사별 브랜드 목록 (중복 제거, 정렬은 호출하는 쪽에서) */
     @Query("""
             select distinct p.event.id, p.brand from EventPlace p
             where p.brand is not null
-            order by p.brand
             """)
     List<Object[]> findEventBrands();
 }

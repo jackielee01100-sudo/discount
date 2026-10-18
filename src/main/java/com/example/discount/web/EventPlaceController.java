@@ -1,5 +1,6 @@
 package com.example.discount.web;
 
+import com.example.discount.domain.EventPlace;
 import com.example.discount.repository.EventPlaceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -31,6 +33,9 @@ public class EventPlaceController {
         if (eventIds == null || eventIds.isEmpty()) return List.of();
         return eventPlaceRepository.search(eventIds, date, date).stream()
                 .filter(p -> brands == null || p.getBrand() == null || brands.contains(p.getBrand()))
+                // 행사 시작일 → 매장명 가나다순 (한글 정렬은 Java에서)
+                .sorted(Comparator.comparing((EventPlace p) -> p.getEvent().getStartDate())
+                        .thenComparing(EventPlace::getName))
                 .map(PlaceResponse::from)
                 .toList();
     }

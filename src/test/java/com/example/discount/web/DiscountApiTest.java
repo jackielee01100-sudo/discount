@@ -168,7 +168,7 @@ class DiscountApiTest {
         }
 
         @Test
-        @DisplayName("같은 서비스를 고른 사용자에게는 통신사데이가 보이고 브랜드도 함께 나온다")
+        @DisplayName("같은 서비스를 고른 사용자에게는 통신사데이가 보이고 브랜드가 가나다순으로 나온다")
         void sameProviderShowsEvent() throws Exception {
             AppUser u = createUser("test_same");
             myServices.save(new MyService(u, testTelecom));
@@ -176,7 +176,7 @@ class DiscountApiTest {
             mvc.perform(get("/api/events").param("mine", "true").with(user("test_same")))
                     .andExpect(jsonPath("$[?(@.name == 'TEST-통신사데이')].providerName").value("TEST-TELECOM"))
                     .andExpect(jsonPath("$[?(@.name == 'TEST-통신사데이')].brands[*]",
-                            containsInAnyOrder("TEST-도넛", "TEST-빵")));
+                            contains("TEST-도넛", "TEST-빵")));
         }
     }
 

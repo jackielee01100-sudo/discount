@@ -38,6 +38,7 @@ public class DiscountEventController {
         for (Object[] row : eventPlaceRepository.findEventBrands()) {
             brandsByEvent.computeIfAbsent((Long) row[0], k -> new ArrayList<>()).add((String) row[1]);
         }
+        brandsByEvent.values().forEach(Collections::sort); // 브랜드 가나다순
         return discountEventRepository.findAllWithProvider().stream()
                 .filter(e -> myProviders.isEmpty() || e.getProvider() == null
                         || myProviders.contains(e.getProvider().getId()))
