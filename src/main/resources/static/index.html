@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>할인 달력</title>
+    <style>
+        :root { --line:#e5e7eb; --muted:#6b7280; --text:#1f2937; --bg:#f6f7f9; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: system-ui, "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
+        nav { background:#111827; padding:0 24px; display:flex; align-items:center; gap:4px; }
+        nav .brand { color:#fff; font-weight:700; margin-right:20px; }
+        nav a { color:#d1d5db; text-decoration:none; padding:14px 12px; border-bottom:2px solid transparent; }
+        nav a.on, nav a:hover { color:#fff; border-bottom-color:#60a5fa; }
+        main { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+        h1 { font-size: 22px; margin: 0 0 16px; }
+
+        /* 상단 체크박스 */
+        .filters { display:flex; flex-wrap:wrap; gap:10px; background:#fff; border:1px solid var(--line);
+                   border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+        .filters label { display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+                         border:1px solid var(--line); cursor:pointer; user-select:none; }
+        .filters input { width:16px; height:16px; margin:0; }
+        .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+        /* 선택된 행사 기간 안내 */
+        .periods { min-height: 24px; margin-bottom: 12px; display:flex; flex-direction:column; gap:4px; }
+        .period { font-size:14px; }
+        .period b { margin-right:6px; }
+
+        /* 달력 */
+        .calendar { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+        .cal-head { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); }
+        .cal-head h2 { margin:0; font-size:18px; }
+        .cal-head button { border:1px solid var(--line); background:#fff; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px; }
+        .grid { display:grid; grid-template-columns: repeat(7, 1fr); }
+        .dow { padding:8px; text-align:center; font-size:13px; color:var(--muted); border-bottom:1px solid var(--line); }
+        .dow:first-child, .day.sun .num { color:#dc2626; }
+        .dow:last-child, .day.sat .num { color:#2563eb; }
+        .day { min-height: 92px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:6px 0 4px; }
+        .day:nth-child(7n) { border-right:none; }
+        .day.other { background:#fafafa; }
+        .day.other .num { opacity:.35; }
+        .num { font-size:13px; padding:0 8px; }
+        .day.today .num { display:inline-block; background:#111827; color:#fff !important; border-radius:999px; padding:1px 7px; margin-left:4px; }
+        .bar { margin-top:4px; height:20px; font-size:12px; line-height:20px; color:#fff; padding:0 6px;
+               white-space:nowrap; overflow:hidden; }
+        .bar.start { margin-left:4px; border-top-left-radius:6px; border-bottom-left-radius:6px; }
+        .bar.end { margin-right:4px; border-top-right-radius:6px; border-bottom-right-radius:6px; }
+        .empty { color:var(--muted); font-size:14px; }
+    </style>
+</head>
+<body>
+<nav>
+    <span class="brand">할인 정보</span>
+    <a href="/" class="on">달력</a>
+    <a href="/map.html">지도</a>
+</nav>
+<main>
+    <h1>할인 달력</h1>
+
+    <div class="filters" id="filters"><span class="empty">행사 불러오는 중…</span></div>
+    <div class="periods" id="periods"></div>
+
+    <div class="calendar">
+        <div class="cal-head">
+            <button id="prev" type="button">◀ 이전</button>
+            <h2 id="title"></h2>
+            <button id="next" type="button">다음 ▶</button>
+        </div>
+        <div class="grid" id="grid"></div>
+    </div>
+</main>
+
+<script>
+    const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+    let events = [];            // 서버에서 받은 행사 목록
+    const checked = new Set();  // 체크된 행사 id
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth(); // 0~11
+
+    // "2026-10-20" → 로컬 날짜 (new Date("2026-10-20")는 UTC로 해석되므로 직접 파싱)
+    function parseDate(s) {
+        const [y, m, d] = s.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    function key(date) { // 날짜 비교용 숫자 yyyymmdd
+        return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+    }
+    function fmt(date) {
+        return `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}(${DOW[date.getDay()]})`;
+    }
+
+    function renderFilters() {
+        const box = document.getElementById('filters');
+        if (events.length === 0) {
+            box.innerHTML = '<span class="empty">등록된 할인 행사가 없습니다.</span>';
+            return;
+        }
+        box.innerHTML = '';
+        events.forEach(ev => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = checked.has(ev.id);
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    checked.add(ev.id);
+                    // 체크하면 행사 시작 달로 이동
+                    const start = parseDate(ev.startDate);
+                    year = start.getFullYear();
+                    month = start.getMonth();
+                } else {
+                    checked.delete(ev.id);
+                }
+                render();
+            });
+            const dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = ev.color;
+            label.append(cb, dot, document.createTextNode(ev.name));
+            box.appendChild(label);
+        });
+    }
+
+    function renderPeriods() {
+        const box = document.getElementById('periods');
+        box.innerHTML = '';
+        events.filter(ev => checked.has(ev.id)).forEach(ev => {
+            const div = document.createElement('div');
+            div.className = 'period';
+            const b = document.createElement('b');
+            b.style.color = ev.color;
+            b.textContent = ev.name;
+            div.append(b, document.createTextNode(
+                `${fmt(parseDate(ev.startDate))} ~ ${fmt(parseDate(ev.endDate))}`));
+            box.appendChild(div);
+        });
+    }
+
+    function renderCalendar() {
+        document.getElementById('title').textContent = `${year}년 ${month + 1}월`;
+        const grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        DOW.forEach(d => {
+            const el = document.createElement('div');
+            el.className = 'dow';
+            el.textContent = d;
+            grid.appendChild(el);
+        });
+
+        // 달력 첫 칸 = 이번 달 1일이 속한 주의 일요일, 6주(42칸) 표시
+        const first = new Date(year, month, 1);
+        const start = new Date(year, month, 1 - first.getDay());
+        const todayKey = key(now);
+        const active = events.filter(ev => checked.has(ev.id)).map(ev => ({
+            ...ev, s: key(parseDate(ev.startDate)), e: key(parseDate(ev.endDate))
+        }));
+
+        for (let i = 0; i < 42; i++) {
+            const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+            const k = key(date);
+            const cell = document.createElement('div');
+            cell.className = 'day';
+            if (date.getMonth() !== month) cell.classList.add('other');
+            if (date.getDay() === 0) cell.classList.add('sun');
+            if (date.getDay() === 6) cell.classList.add('sat');
+            if (k === todayKey) cell.classList.add('today');
+
+            const num = document.createElement('span');
+            num.className = 'num';
+            num.textContent = date.getDate();
+            cell.appendChild(num);
+
+            active.filter(ev => k >= ev.s && k <= ev.e).forEach(ev => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.style.background = ev.color;
+                bar.title = `${ev.name}: ${ev.startDate} ~ ${ev.endDate}`;
+                // 시작일이거나 주의 첫날(일요일)이면 이름 표시
+                if (k === ev.s || date.getDay() === 0) bar.textContent = ev.name;
+                if (k === ev.s || date.getDay() === 0) bar.classList.add('start');
+                if (k === ev.e || date.getDay() === 6) bar.classList.add('end');
+                cell.appendChild(bar);
+            });
+            grid.appendChild(cell);
+        }
+    }
+
+    function render() {
+        renderFilters();
+        renderPeriods();
+        renderCalendar();
+    }
+
+    document.getElementById('prev').addEventListener('click', () => {
+        month--; if (month < 0) { month = 11; year--; }
+        renderCalendar();
+    });
+    document.getElementById('next').addEventListener('click', () => {
+        month++; if (month > 11) { month = 0; year++; }
+        renderCalendar();
+    });
+
+    fetch('/api/events')
+        .then(res => res.json())
+        .then(data => { events = data; render(); })
+        .catch(() => {
+            document.getElementById('filters').innerHTML = '<span class="empty">행사를 불러오지 못했습니다.</span>';
+            renderCalendar();
+        });
+</script>
+</body>
+</html>

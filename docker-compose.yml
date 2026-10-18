@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: discount-postgres
+    environment:
+      POSTGRES_DB: discount
+      POSTGRES_USER: discount
+      POSTGRES_PASSWORD: discount
+    ports:
+      - "5432:5432"
+    volumes:
+      - discount-pgdata:/var/lib/postgresql/data
+
+volumes:
+  discount-pgdata:

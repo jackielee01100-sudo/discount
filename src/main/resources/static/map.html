@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>할인 지도</title>
+    <!-- 지도: Leaflet + OpenStreetMap (API 키 불필요) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <style>
+        :root { --line:#e5e7eb; --muted:#6b7280; --text:#1f2937; --bg:#f6f7f9; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: system-ui, "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
+        nav { background:#111827; padding:0 24px; display:flex; align-items:center; gap:4px; }
+        nav .brand { color:#fff; font-weight:700; margin-right:20px; }
+        nav a { color:#d1d5db; text-decoration:none; padding:14px 12px; border-bottom:2px solid transparent; }
+        nav a.on, nav a:hover { color:#fff; border-bottom-color:#60a5fa; }
+        main { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+        h1 { font-size: 22px; margin: 0 0 16px; }
+
+        /* 필터 */
+        .filters { background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px;
+                   display:flex; flex-direction:column; gap:12px; }
+        .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+        .row > .label { width:64px; font-size:13px; color:var(--muted); font-weight:600; }
+        .events { display:flex; flex-direction:column; gap:8px; flex:1; }
+        .event-line { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+        .sub { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-left:4px; padding-left:10px; border-left:2px solid var(--line); }
+        input[type=date], input[type=text] { padding:6px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; }
+        input[type=text] { width:200px; }
+        button { border:1px solid #2563eb; background:#fff; color:#2563eb; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px; }
+        button.on, button.primary { background:#2563eb; color:#fff; }
+        button.ghost { border-color:#d1d5db; color:var(--muted); }
+        .chip { display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+                border:1px solid var(--line); cursor:pointer; user-select:none; font-size:14px; background:#fff; }
+        .chip.small { padding:4px 10px; font-size:13px; }
+        .chip input { width:16px; height:16px; margin:0; }
+        .chip small { color:var(--muted); }
+        .dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; }
+        .route-info { font-size:14px; color:var(--muted); }
+        .route-info.err { color:#dc2626; }
+
+        /* 지도 + 목록 */
+        .content { display:grid; grid-template-columns: 1fr 320px; gap:12px; }
+        #map { height: 560px; border-radius:10px; border:1px solid var(--line); }
+        .list { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:auto; max-height:560px; }
+        .list h2 { font-size:15px; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#fff; }
+        .item { padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+        .item:hover { background:#f9fafb; }
+        .item .name { font-weight:600; display:flex; align-items:center; gap:6px; }
+        .item .benefit { font-size:14px; margin-top:2px; }
+        .item .meta { font-size:12px; color:var(--muted); margin-top:2px; }
+        .empty { color:var(--muted); font-size:14px; padding:14px; }
+        .pin { width:26px; height:26px; border-radius:50%; color:#fff; font-weight:700; font-size:13px;
+               display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+        @media (max-width: 800px) {
+            .content { grid-template-columns: 1fr; }
+            #map { height: 400px; }
+            input[type=text] { width:100%; }
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <span class="brand">할인 정보</span>
+    <a href="/">달력</a>
+    <a href="/map.html" class="on">지도</a>
+</nav>
+<main>
+    <h1>할인 지도</h1>
+
+    <div class="filters">
+        <div class="row">
+            <span class="label">날짜</span>
+            <button type="button" id="todayBtn">오늘</button>
+            <input type="date" id="date">
+        </div>
+        <div class="row" style="align-items:flex-start">
+            <span class="label" style="padding-top:7px">할인정보</span>
+            <div class="events" id="eventBox"><span class="empty" style="padding:6px 0">불러오는 중…</span></div>
+        </div>
+        <div class="row">
+            <span class="label">경로</span>
+            <input type="text" id="origin" placeholder="출발지 (예: 강남역)">
+            →
+            <input type="text" id="destination" placeholder="도착지 (예: 광화문)">
+            <button type="button" class="primary" id="routeBtn">길찾기</button>
+            <button type="button" class="ghost" id="clearRouteBtn">지우기</button>
+            <span class="route-info" id="routeInfo"></span>
+        </div>
+    </div>
+
+    <div class="content">
+        <div id="map"></div>
+        <div class="list">
+            <h2 id="count">매장</h2>
+            <div id="items"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+    const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+    const dateInput = document.getElementById('date');
+    const todayBtn = document.getElementById('todayBtn');
+    const checkedEvents = new Set();   // 체크된 행사 id
+    const checkedBrands = new Set();   // 체크된 브랜드명
+
+    function todayStr() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    function fmt(s) {
+        const [y, m, d] = s.split('-').map(Number);
+        return `${m}/${d}(${DOW[new Date(y, m - 1, d).getDay()]})`;
+    }
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ---------------- 지도 ----------------
+    const map = L.map('map').setView([37.5665, 126.9780], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    const placeLayer = L.layerGroup().addTo(map);
+    const routeLayer = L.layerGroup().addTo(map);
+    window.addEventListener('resize', () => map.invalidateSize());
+
+    // 매장 + 경로가 모두 보이도록 범위 맞춤
+    function fitAll() {
+        const bounds = L.latLngBounds([]);
+        [placeLayer, routeLayer].forEach(g => g.eachLayer(l => {
+            bounds.extend(l.getBounds ? l.getBounds() : l.getLatLng());
+        }));
+        map.invalidateSize();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+
+    // ---------------- 할인정보 체크박스 ----------------
+    function chip(text, color, checked, onChange, small) {
+        const label = document.createElement('label');
+        label.className = 'chip' + (small ? ' small' : '');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = checked;
+        cb.addEventListener('change', () => onChange(cb.checked));
+        label.appendChild(cb);
+        if (color) {
+            const dot = document.createElement('span');
+            dot.className = 'dot';
+            dot.style.background = color;
+            label.appendChild(dot);
+        }
+        label.insertAdjacentHTML('beforeend', text);
+        return label;
+    }
+
+    async function loadEvents() {
+        const events = await fetch('/api/events').then(r => r.json());
+        const box = document.getElementById('eventBox');
+        box.innerHTML = '';
+        events.forEach(ev => {
+            checkedEvents.add(ev.id);
+            ev.brands.forEach(b => checkedBrands.add(b));
+
+            const line = document.createElement('div');
+            line.className = 'event-line';
+
+            // 하위 선택지 (브랜드) - 행사가 체크됐을 때만 보임
+            const sub = document.createElement('div');
+            sub.className = 'sub';
+            ev.brands.forEach(b => sub.appendChild(chip(esc(b), null, true, on => {
+                on ? checkedBrands.add(b) : checkedBrands.delete(b);
+                search();
+            }, true)));
+
+            line.appendChild(chip(`${esc(ev.name)} <small>${fmt(ev.startDate)}~${fmt(ev.endDate)}</small>`, ev.color, true, on => {
+                on ? checkedEvents.add(ev.id) : checkedEvents.delete(ev.id);
+                sub.style.display = on ? '' : 'none';
+                search();
+            }));
+            if (ev.brands.length > 0) line.appendChild(sub);
+            box.appendChild(line);
+        });
+        if (events.length === 0) box.innerHTML = '<span class="empty" style="padding:6px 0">등록된 할인 행사가 없습니다.</span>';
+    }
+
+    // ---------------- 매장 조회 ----------------
+    async function search() {
+        todayBtn.classList.toggle('on', dateInput.value === todayStr());
+        placeLayer.clearLayers();
+        const items = document.getElementById('items');
+        if (!dateInput.value || checkedEvents.size === 0) {
+            document.getElementById('count').textContent = '매장 0곳';
+            items.innerHTML = '<div class="empty">날짜와 할인정보를 선택하세요.</div>';
+            return;
+        }
+        const params = new URLSearchParams({
+            date: dateInput.value,
+            eventIds: [...checkedEvents].join(','),
+            brands: [...checkedBrands].join(',')
+        });
+        const places = await fetch('/api/places?' + params).then(r => r.json());
+
+        document.getElementById('count').textContent = `매장 ${places.length}곳`;
+        items.innerHTML = places.length ? '' : '<div class="empty">이 날짜에 진행 중인 할인 매장이 없습니다.</div>';
+        places.forEach(p => {
+            const popup = `<b>${esc(p.name)}</b><br>${esc(p.benefit)}<br>`
+                + `<span style="color:${esc(p.color)}">${esc(p.eventName)}</span> ${fmt(p.startDate)} ~ ${fmt(p.endDate)}<br>`
+                + `<small>${esc(p.address)}</small>`;
+            const m = L.circleMarker([p.latitude, p.longitude], {
+                radius: 10, color: '#fff', weight: 2, fillColor: p.color, fillOpacity: 0.95
+            }).bindPopup(popup).addTo(placeLayer);
+
+            const div = document.createElement('div');
+            div.className = 'item';
+            div.innerHTML = `<div class="name"><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)}</div>`
+                + `<div class="benefit">${esc(p.benefit)}</div>`
+                + `<div class="meta">${esc(p.eventName)}${p.brand ? ' · ' + esc(p.brand) : ''} · ${fmt(p.startDate)} ~ ${fmt(p.endDate)}</div>`;
+            div.addEventListener('click', () => { map.setView([p.latitude, p.longitude], 15); m.openPopup(); });
+            items.appendChild(div);
+        });
+        fitAll();
+    }
+
+    // ---------------- 출발지 → 도착지 경로 ----------------
+    // 장소명 → 좌표: OpenStreetMap Nominatim (키 불필요, 초당 1회 이하로 사용)
+    async function geocode(query) {
+        const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+            q: query, format: 'json', limit: 1, countrycodes: 'kr', 'accept-language': 'ko'
+        });
+        const res = await fetch(url).then(r => r.json());
+        if (!res.length) throw new Error(`'${query}' 위치를 찾지 못했습니다.`);
+        return { lat: +res[0].lat, lng: +res[0].lon, name: res[0].display_name };
+    }
+
+    // 좌표 → 경로: OSRM 공개 데모 서버 (자동차 기준, 키 불필요)
+    async function route(a, b) {
+        const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url).then(r => r.json());
+        if (res.code !== 'Ok' || !res.routes.length) throw new Error('경로를 찾지 못했습니다.');
+        return res.routes[0];
+    }
+
+    function pin(latlng, text, color, title) {
+        return L.marker(latlng, {
+            icon: L.divIcon({ className: '', html: `<div class="pin" style="background:${color}">${text}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] })
+        }).bindPopup(`<b>${text === '출' ? '출발' : '도착'}</b><br><small>${esc(title)}</small>`);
+    }
+
+    async function findRoute() {
+        const info = document.getElementById('routeInfo');
+        const o = document.getElementById('origin').value.trim();
+        const d = document.getElementById('destination').value.trim();
+        info.className = 'route-info';
+        if (!o || !d) { info.textContent = '출발지와 도착지를 입력하세요.'; return; }
+        info.textContent = '경로 찾는 중…';
+        try {
+            const a = await geocode(o);
+            await new Promise(r => setTimeout(r, 1100)); // Nominatim 이용 정책: 초당 1회
+            const b = await geocode(d);
+            const r = await route(a, b);
+
+            routeLayer.clearLayers();
+            L.geoJSON(r.geometry, { style: { color: '#111827', weight: 5, opacity: 0.75 } }).addTo(routeLayer);
+            pin([a.lat, a.lng], '출', '#16a34a', a.name).addTo(routeLayer);
+            pin([b.lat, b.lng], '도', '#dc2626', b.name).addTo(routeLayer);
+            info.textContent = `${(r.distance / 1000).toFixed(1)}km · 약 ${Math.round(r.duration / 60)}분 (자동차)`;
+            fitAll();
+        } catch (e) {
+            info.className = 'route-info err';
+            info.textContent = e.message || '경로 검색에 실패했습니다.';
+        }
+    }
+
+    // ---------------- 이벤트 연결 ----------------
+    todayBtn.addEventListener('click', () => { dateInput.value = todayStr(); search(); });
+    dateInput.addEventListener('change', search);
+    document.getElementById('routeBtn').addEventListener('click', findRoute);
+    ['origin', 'destination'].forEach(id =>
+        document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') findRoute(); }));
+    document.getElementById('clearRouteBtn').addEventListener('click', () => {
+        routeLayer.clearLayers();
+        document.getElementById('origin').value = '';
+        document.getElementById('destination').value = '';
+        document.getElementById('routeInfo').textContent = '';
+        fitAll();
+    });
+
+    dateInput.value = todayStr();
+    loadEvents().then(search).catch(() => {
+        document.getElementById('items').innerHTML = '<div class="empty">데이터를 불러오지 못했습니다.</div>';
+    });
+</script>
+</body>
+</html>
